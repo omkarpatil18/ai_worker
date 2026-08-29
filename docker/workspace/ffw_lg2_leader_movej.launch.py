@@ -19,10 +19,13 @@
 # ---------------------------------------------------------------------------
 # LOCAL COPY for cyclo_control `movej` teleop.
 # Source: ffw_bringup/launch/ffw_lg2_leader_ai.launch.py (ai_worker 2.2.5)
-# Only change: the joint_trajectory_command_broadcaster output topics are
-# remapped to `.../raw_joint_trajectory` so that
-# `ai_worker_movej_controller` (cyclo_control) is the ONLY publisher on the
-# follower's `.../joint_trajectory` topics.
+# Changes vs stock:
+#  1. joint_trajectory_command_broadcaster output topics remapped to
+#     `.../raw_joint_trajectory` so the cyclo_control controller is the ONLY
+#     publisher on the follower's `.../joint_trajectory` topics.
+#  2. /cmd_vel remapped to /cmd_vel_disabled (base motion off for tabletop).
+#  3. Controllers yaml (see robot_controllers below) dead-ends the joystick
+#     head/lift output topics (head/lift teleop off for tabletop).
 #
 # Run (inside the ai_worker container, after follower bringup and
 # `motion_controller controller_type:=movej`):
@@ -84,6 +87,12 @@ def generate_launch_description():
             '--controller-ros-args',
             '-r /leader/joint_trajectory_command_broadcaster_right/joint_trajectory:='
             '/leader/joint_trajectory_command_broadcaster_right/raw_joint_trajectory',
+            # base motion DISABLED for tabletop manip: joystick_controller's
+            # hardcoded /cmd_vel publisher is remapped to a dead-end topic so the
+            # swerve base can never be driven from the leader (even if swerve
+            # mode is toggled by accident). Remove this remap to restore.
+            '--controller-ros-args',
+            '-r /cmd_vel:=/cmd_vel_disabled',
             # --- end remaps ---
             'joint_trajectory_command_broadcaster',
             'spring_actuator_controller_left',
