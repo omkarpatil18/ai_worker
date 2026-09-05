@@ -89,6 +89,26 @@ teleop resumes. Pass `--no-rearm` to leave it disarmed instead.
 
 ---
 
+## Gripper open (manual)
+
+Force a gripper open (e.g. it's clamped on an object after a run). Stop/Clear
+any policy and disarm teleop first, or the command is immediately overridden.
+Run in any container shell; only the named gripper joint moves (1 s smooth open;
+0.0 = fully open, ~1.1 = fully closed):
+```bash
+# LEFT gripper
+ros2 topic pub --once /leader/joint_trajectory_command_broadcaster_left/joint_trajectory \
+  trajectory_msgs/msg/JointTrajectory \
+  "{joint_names: [gripper_l_joint1], points: [{positions: [0.0], time_from_start: {sec: 1}}]}"
+
+# RIGHT gripper
+ros2 topic pub --once /leader/joint_trajectory_command_broadcaster_right/joint_trajectory \
+  trajectory_msgs/msg/JointTrajectory \
+  "{joint_names: [gripper_r_joint1], points: [{positions: [0.0], time_from_start: {sec: 1}}]}"
+```
+
+---
+
 ## Re-home (send arms back to the tabletop start pose)
 
 Run in the **cyclo_intelligence** container (`cd ~/cyclo_intelligence && ./docker/container.sh enter`).
