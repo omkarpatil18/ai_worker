@@ -2,6 +2,23 @@
 Changelog for package ffw_description
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+2.2.8 (2026-09-18)
+------------------
+* Added and installed BG2, SG2, and SH5 MuJoCo models and scenes.
+* Tuned simulation actuators and SG2/SH5 swerve dynamics, including tire collision geometry and steering response.
+* Aligned local HX5-D20 URDFs and SH5 hand descriptions with rev2 joint definitions and palm geometry.
+* Added split palm collision meshes to preserve finger clearance.
+* Contributors: Kiwoong Park
+
+2.2.7 (2026-09-14)
+------------------
+* None
+
+2.2.6 (2026-09-04)
+------------------
+* Updated BH5 and SH5 urdf xacro
+* Contributors: Hyunwoo Nam
+
 2.2.5 (2026-08-19)
 ------------------
 * Corrected left and right joint7 position limits in URDF and ros2_control configurations for SG2, SH5, BG2, BH5, F1, and F2

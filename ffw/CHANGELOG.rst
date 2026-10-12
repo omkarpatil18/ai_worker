@@ -2,6 +2,23 @@
 Changelog for package ffw
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
+2.2.8 (2026-09-18)
+------------------
+* Added BG2, SG2, and SH5 MuJoCo models to ffw_description.
+* Aligned local HX5-D20 hand descriptions with rev2.
+* Contributors: Kiwoong Park
+
+2.2.7 (2026-09-14)
+------------------
+* Updated Dynamixel SDK in Docker container environment
+* Changed serial buffer reading in the Dynamixel SDK from a busy loop using `read()` to a `poll()`-based approach with a maximum wait time of 1 ms.
+* Contributors: Hyungyu Kim
+
+2.2.6 (2026-09-04)
+------------------
+* Updated BH5 and SH5 urdf xacro
+* Contributors: Hyunwoo Nam
+
 2.2.5 (2026-08-19)
 ------------------
 * Corrected left and right joint7 position limits in URDF and ros2_control configurations for SG2, SH5, BG2, BH5, F1, and F2
