@@ -14,8 +14,8 @@ docker exec -it ai_worker bash -ic "python3 /root/ros2_ws/src/ai_worker/tools/mo
 | `motor_profile.py` | Records every `/joint_states` message (position, velocity, current for all joints) and `/ffw_follower/dxl_state` to CSV; prints a 30 s summary. | Listens only |
 | `live_current.py` | Serves a live left-vs-right current plot (in amperes) at `http://<robot-ip>:8765`. | Listens only |
 | `plot_current.py` | Draws a PNG of shoulder current from a `motor_profile` recording. | No (reads a CSV) |
-| `arm_circles.py` | Small, slow mirrored shoulder circles around the tabletop home pose. | **Moves both arms** |
-| `arm_updown.py` | Raises and lowers one or both shoulders (joint 1 only), with pauses at each end. | **Moves the arm(s)** |
+| `arm_circles.py` | Small, slow mirrored shoulder circles around the tabletop home pose. Two-arm tool: needs both arms powered and at home, so it does not run in one-armed mode. | **Moves both arms** |
+| `arm_updown.py` | Raises and lowers a shoulder (joint 1 only), with pauses at each end. One-armed branch default: left shoulder; the other arm may be anywhere with `--other-arm-anywhere`. | **Moves the arm(s)** |
 | `dxl_readonly_compare.py` | Reads control-table registers straight from the servos (READ instruction only) and compares right vs left. | Bus read; **bringup must be stopped** |
 | `overload_watchdog.py` | Watches `/rosout` for servo fault messages. Dry run by default; `--arm` switches all follower torque off on the first fault. | Experimental, see below |
 
@@ -31,6 +31,10 @@ docker exec -it ai_worker bash -ic "python3 /root/ros2_ws/src/ai_worker/tools/mo
   `dxl_readonly_compare.py` with the bringup stopped instead.
 - **Starting these Python tools can cost one skipped control cycle** (CPU load at launch). Start
   them while the arms are at rest.
+- **Software torque-off does not work in one-armed mode.** The driver's `set_dxl_torque false`
+  service is answered "Already disabled" and does nothing, because the right-arm servos are
+  permanently off and the driver treats "any servo off" as "all off". Cut torque with the E-STOP
+  or by killing the bringup. `overload_watchdog.py --arm` is therefore ineffective there.
 - **A latched (Overload) shoulder free-falls.** Recorded 2026-11-27: 0.41 rad in 0.33 s, landing on
   the table, with no dynamic braking visible. A watchdog that reacts to the error message is too
   late for that joint, which is why `overload_watchdog.py` stays experimental. A watchdog on

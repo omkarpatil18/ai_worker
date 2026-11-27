@@ -15,10 +15,23 @@
 # limitations under the License.
 #
 # Authors: Sungho Woo, Woojin Wie, Wonho Yun
+#
+# ONE-ARMED BRANCH: this is the DEFAULT follower bringup and it is LEFT ARM ONLY.
+#   - the servo config is ALWAYS ffw_sg2_follower_left_arm, which never enables torque on the
+#     right-arm servos (DYNAMIXEL IDs 1 to 8) but still reads them for /joint_states. The
+#     ros2_control_type launch argument is accepted but ignored, because the Cyclo Manager UI
+#     always passes ros2_control_type:=ffw_sg2_follower;
+#   - arm_r_controller is not spawned and no right-arm init-position executor is started, so
+#     nothing commands the right arm.
+# The unpowered right arm stays wherever gravity leaves it, so put it in a safe resting
+# position before launching. No particular pose is assumed.
+# The stock two-arm bringup is ffw_sg2_follower_ai_both_arms.launch.py (it powers the right arm).
+# Keep the two files in sync when either changes.
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.actions import IncludeLaunchDescription
+from launch.actions import LogInfo
 from launch.actions import RegisterEventHandler
 from launch.actions import TimerAction
 from launch.conditions import IfCondition
@@ -31,6 +44,10 @@ from launch.substitutions import LaunchConfiguration
 from launch.substitutions import PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
+
+
+# The only servo config this launch may use. See the header comment.
+LEFT_ARM_ROS2_CONTROL_TYPE = 'ffw_sg2_follower_left_arm'
 
 
 def generate_launch_description():
@@ -68,8 +85,12 @@ def generate_launch_description():
             description='Initial position file.'),
         DeclareLaunchArgument(
             'ros2_control_type',
-            default_value='ffw_sg2_follower',
-            description='Type of ros2_control',
+            default_value=LEFT_ARM_ROS2_CONTROL_TYPE,
+            description='IGNORED on the one-armed branch. This launch always uses '
+                        'ffw_sg2_follower_left_arm, which never enables torque on the right '
+                        'arm (DYNAMIXEL IDs 1-8), whatever value is passed (the Cyclo Manager '
+                        'UI passes ffw_sg2_follower). For two arms use '
+                        'ffw_sg2_follower_ai_both_arms.launch.py.',
         ),
     ]
 
@@ -86,7 +107,6 @@ def generate_launch_description():
     model = LaunchConfiguration('model')
     use_head_eef_tracker = LaunchConfiguration('use_head_eef_tracker')
     init_position_file = LaunchConfiguration('init_position_file')
-    ros2_control_type = LaunchConfiguration('ros2_control_type')
 
     robot_description_content = Command([
         PathJoinSubstitution([FindExecutable(name='xacro')]),
@@ -108,7 +128,8 @@ def generate_launch_description():
         ' ',
         'init_position_file:=', init_position_file,
         ' ',
-        'ros2_control_type:=', ros2_control_type,
+        # Fixed on purpose: the launch argument of the same name is ignored (see above).
+        'ros2_control_type:=', LEFT_ARM_ROS2_CONTROL_TYPE,
     ])
 
     controller_manager_config = PathJoinSubstitution([
@@ -159,16 +180,12 @@ def generate_launch_description():
             '-r /arm_l_controller/joint_trajectory:='
             '/leader/joint_trajectory_command_broadcaster_left/joint_trajectory',
             '--controller-ros-args',
-            '-r /arm_r_controller/joint_trajectory:='
-            '/leader/joint_trajectory_command_broadcaster_right/joint_trajectory',
-            '--controller-ros-args',
             '-r /head_controller/joint_trajectory:='
             '/leader/joystick_controller_left/joint_trajectory',
             '--controller-ros-args',
             '-r /lift_controller/joint_trajectory:='
             '/leader/joystick_controller_right/joint_trajectory',
             'arm_l_controller',
-            'arm_r_controller',
             'head_controller',
             'lift_controller',
             'ffw_robot_manager'
@@ -239,13 +256,6 @@ def generate_launch_description():
         parameters=[trajectory_params_file],
         output='screen',
     )
-    joint_trajectory_executor_right = Node(
-        package='ffw_bringup',
-        executable='joint_trajectory_executor',
-        name='arm_r_joint_trajectory_executor',
-        parameters=[trajectory_params_file],
-        output='screen',
-    )
     joint_trajectory_executor_head = Node(
         package='ffw_bringup',
         executable='joint_trajectory_executor',
@@ -274,7 +284,6 @@ def generate_launch_description():
             target_action=robot_controller_spawner,
             on_exit=[
                 joint_trajectory_executor_left,
-                joint_trajectory_executor_right,
                 joint_trajectory_executor_head,
                 joint_trajectory_executor_lift,
                 joint_trajectory_executor_swerve_steering
@@ -363,8 +372,14 @@ def generate_launch_description():
         }],
     )
 
+    one_armed_notice = LogInfo(msg=[
+        'ONE-ARMED bringup: servo config forced to ', LEFT_ARM_ROS2_CONTROL_TYPE,
+        ' (right arm is never powered). Requested ros2_control_type was: ',
+        LaunchConfiguration('ros2_control_type'), ' (ignored).'])
+
     return LaunchDescription(
         declared_arguments + [
+            one_armed_notice,
             control_node,
             robot_state_pub_node,
             joint_state_broadcaster_spawner,

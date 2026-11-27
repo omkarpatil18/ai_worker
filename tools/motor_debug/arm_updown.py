@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Raise and lower one shoulder (joint 1) only; every other joint holds still.
 
-Purpose: load the shoulder servo alone (default: right shoulder, DXL ID 1) with a clean
+Purpose: load one shoulder servo alone (one-armed branch default: the LEFT shoulder) with a clean
 lift / lower cycle, to watch its current (run motor_profile.py / live_current.py alongside).
 
-Motion (default: both shoulders together), per cycle:
+Motion (ONE-ARMED BRANCH default: left shoulder only; --side both or right for the others), per cycle:
   smooth rise by A over period/2 -> hold at the top for --pause -> smooth descent over period/2
   -> hold at home for --pause. The holds make it easy to line the motion up with the current plot.
   j1 only ever moves UP from home (negative direction) and back, so the hand never gets closer to
@@ -17,7 +17,9 @@ Motion (default: both shoulders together), per cycle:
   the gap to the other arm only grows. The first and last cycle are eased in/out.
 
 Safety checks (same as arm_circles.py):
-  before moving  - every arm joint within --start-tol (0.05 rad) of home; nobody else publishing
+  before moving  - the arm(s) to move must be within --start-tol (0.05 rad) of home; the other
+                   arm may be anywhere only with --other-arm-anywhere (no pose is assumed for
+                   it, and clearance to it is then your visual check); nobody else publishing
                    on the arm command topics
   while moving   - stops publishing (servos hold the last target) if any commanded joint is more
                    than --max-err (0.15 rad) from its measured position, or /joint_states is
@@ -26,9 +28,9 @@ Safety checks (same as arm_circles.py):
 
 Run inside the ai_worker container, bringup up, no leader/teleop/replay running:
     docker exec -it ai_worker bash -ic "python3 /root/ros2_ws/src/ai_worker/tools/motor_debug/arm_updown.py --dry-run"
-    docker exec -it ai_worker bash -ic "python3 /root/ros2_ws/src/ai_worker/tools/motor_debug/arm_updown.py"                 # both shoulders
-    docker exec -it ai_worker bash -ic "python3 /root/ros2_ws/src/ai_worker/tools/motor_debug/arm_updown.py --side right"    # right (ID 1)
-    docker exec -it ai_worker bash -ic "python3 /root/ros2_ws/src/ai_worker/tools/motor_debug/arm_updown.py --side left"     # left (ID 31)
+    docker exec -it ai_worker bash -ic "python3 /root/ros2_ws/src/ai_worker/tools/motor_debug/arm_updown.py"                 # left shoulder (default)
+    docker exec -it ai_worker bash -ic "python3 /root/ros2_ws/src/ai_worker/tools/motor_debug/arm_updown.py --side right"    # right (ID 1): needs the both-arms bringup, powers the faulty servo
+    docker exec -it ai_worker bash -ic "python3 /root/ros2_ws/src/ai_worker/tools/motor_debug/arm_updown.py --side both"     # both shoulders
 """
 import argparse
 import math
@@ -114,13 +116,15 @@ class UpDown(Node):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--side", choices=["right", "left", "both"], default="both")
+    ap.add_argument("--side", choices=["right", "left", "both"], default="left")
     ap.add_argument("--amp", type=float, default=0.20, help="rad the shoulder is raised from home (max 0.30)")
     ap.add_argument("--period", type=float, default=8.0, help="seconds of motion per cycle: half up, half down (min 6)")
     ap.add_argument("--pause", type=float, default=3.0, help="seconds held at the top and again at home (0-30)")
     ap.add_argument("--loops", type=int, default=6)
     ap.add_argument("--start-tol", type=float, default=0.05)
     ap.add_argument("--max-err", type=float, default=0.15)
+    ap.add_argument("--other-arm-anywhere", action="store_true",
+                    help="allow the arm that is not moved to be away from home (you checked clearance by eye)")
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args()
     if not (0 < a.amp <= 0.30) or a.period < 6.0 or a.loops < 1 or not (0 <= a.pause <= 30):
@@ -138,9 +142,29 @@ def main():
         if missing:
             raise SystemExit(f"no /joint_states for {missing}; is the follower bringup up?")
         off = {j: n.meas[j] - h for j, h in HOME.items()}
-        bad = {j: round(v, 3) for j, v in off.items() if abs(v) > a.start_tol}
+        moved = {j for s in sides for j in SIDES[s][1]}
+        bad = {j: round(v, 3) for j, v in off.items() if abs(v) > a.start_tol and j in moved}
         if bad:
-            raise SystemExit(f"refusing: joints not at home within {a.start_tol} rad: {bad}")
+            raise SystemExit(f"refusing: joints of the arm to move are not at home within {a.start_tol} rad: {bad}")
+        # The arm that is NOT moved may be anywhere (e.g. unpowered in one-armed operation). No pose
+        # is assumed for it, but the clearance between the arms was only FK-checked with it at home.
+        other = {j: round(v, 3) for j, v in off.items() if abs(v) > a.start_tol and j not in moved}
+        if other and not a.other_arm_anywhere:
+            raise SystemExit(
+                "refusing: the other arm is not at its home pose "
+                f"({other}). Clearance between the arms was only checked with it at home. Look at "
+                "the robot, make sure the moving arm's path (up to 0.3 rad up from home) is clear of "
+                "it, then rerun with --other-arm-anywhere.")
+        if other:
+            print("note: the other arm is away from home; clearance to it is NOT checked by this script")
+        # A side with no subscriber on its command topic has no controller behind it (e.g. the
+        # right arm in one-armed operation): commands would go nowhere, so refuse up front.
+        dead = [s for s in sides if n.count_subscribers(SIDES[s][0]) == 0]
+        if dead:
+            raise SystemExit(
+                f"refusing: no controller is listening for the {' and '.join(dead)} arm "
+                f"({', '.join(SIDES[s][0] for s in dead)}). In one-armed operation only the left "
+                "arm can be moved.")
         others = n.other_publishers()
         if others:
             raise SystemExit("refusing: something else commands the arm(s): " + "; ".join(others))

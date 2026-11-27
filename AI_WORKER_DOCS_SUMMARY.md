@@ -1,5 +1,17 @@
 # ROBOTIS AI Worker — Documentation Digest for Claude
 
+> **ONE-ARMED MODE (2026-11-27, `one-armed` branches of ai_worker / cyclo_control / cyclo_intelligence).**
+> The right shoulder servo (ID 1) is faulty, so the robot runs LEFT ARM ONLY and the right arm is
+> never powered or commanded. Everything below describes the stock two-arm robot; where it
+> conflicts with one-armed operation, the operator guides in `docker/workspace/`
+> (`POLICY_INFERENCE_README.md`, `LLM_AGENT_README.md`, `TABLETOP_TELEOP_README.md`) win.
+> Key differences: `ffw_sg2_follower_ai.launch.py` is left-arm-only (two arms:
+> `ffw_sg2_follower_ai_both_arms.launch.py`); robot types `ffw_sg2_rev1_left` /
+> `ffw_sg2_rev1_left_eef`; secure the limp right arm clear of the left arm before any motion;
+> software torque-off does not work (use the E-STOP); run
+> `tools/one_armed_container_check.sh` after any container restart or recreate.
+
+
 Condensed from every page of https://docs.robotis.com/docs/systems/aiworker/ (53 pages, crawled 2026-08-23).
 Purpose: give a fresh Claude instance running **on the robot's Jetson** full working context without re-reading the site.
 

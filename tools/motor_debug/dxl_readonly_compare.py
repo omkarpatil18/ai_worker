@@ -4,7 +4,8 @@
 Sends only READ instructions (0x02). It never writes a register, never enables or disables torque,
 never reboots. Register addresses come from the dynamixel_hardware_interface model files.
 
-Run ONLY with the follower bringup stopped (one program per bus):
+Run ONLY with the follower bringup stopped (one program per bus). It refuses to start while a
+ros2_control_node is running in this container:
     docker exec -it ai_worker bash -c "python3 /root/ros2_ws/src/ai_worker/tools/motor_debug/dxl_readonly_compare.py"
 """
 import argparse
@@ -111,7 +112,23 @@ def main():
     ap.add_argument("--dev", default="/dev/follower")
     ap.add_argument("--baud", type=int, default=4000000)
     ap.add_argument("--pairs", default="1:31,2:32,3:33,4:34,7:37", help="right:left ID pairs")
+    ap.add_argument("--force", action="store_true",
+                    help="run even though a ros2_control_node is running (NOT recommended)")
     a = ap.parse_args()
+    # Only one program may use the servo bus. Talking on it while the driver runs corrupts the
+    # driver's 100 Hz read/write; after 500 ms of read errors it drops torque and the arm falls.
+    running = []
+    for pid in filter(str.isdigit, os.listdir("/proc")):
+        try:
+            with open(f"/proc/{pid}/comm") as f:
+                if f.read().strip().startswith("ros2_control_no"):
+                    running.append(pid)
+        except OSError:
+            pass
+    if running and not a.force:
+        raise SystemExit(
+            f"refusing: ros2_control_node is running (pid {', '.join(running)}). Stop the bringup "
+            "first; this tool must have the servo bus to itself.")
     pairs = [tuple(int(x) for x in p.split(":")) for p in a.pairs.split(",")]
     bus = Bus(a.dev, a.baud)
     names = model_files()

@@ -10,6 +10,11 @@ Detection: the driver (dynamixel_hardware_interface) logs every servo fault on /
     "Dynamixel Hardware Error States [ ID:7] --> 0x..."
 (/ffw_follower/dxl_state can't be used: it showed dxl_hw_state 0 while ID 1 was latched.)
 
+NOT EFFECTIVE IN ONE-ARMED MODE (found 2026-11-27): the driver treats "any servo off" as "all
+off", and the right-arm servos are always off there, so the torque-off request below is answered
+"Already disabled" with success=true and does NOTHING to the left arm, head or lift. In one-armed
+mode use the E-STOP or kill the bringup to cut torque. Keep this tool in dry-run.
+
 Action: calls the driver's own service  dynamixel_hardware_interface/set_dxl_torque  (std_srvs/SetBool,
 data=false) = "Disabling torque for all Dynamixels". Only once. To recover, restart the bringup.
 

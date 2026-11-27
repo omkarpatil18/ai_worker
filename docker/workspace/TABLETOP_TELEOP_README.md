@@ -4,6 +4,45 @@ Leader-driven **Cartesian** teleop (`controller_type:=leader`) tuned for table-t
 manipulation. Hands follow the leader; Shoulder Yaw is biased to a fixed posture;
 grippers follow; motion is 1:1 (no amplification). movej is **not** used here.
 
+> **ONE-ARMED MODE (left arm only) is the default on the `one-armed` branches** (since
+> 2026-11-27; the right shoulder servo is faulty). Only the LEFT follower arm follows the leader.
+> The right arm is never powered or commanded; it stays wherever it was left and no pose is
+> assumed for it. The controller models it at its measured pose, but its collision check skips
+> most left-arm vs right-arm pairs, so do not rely on it to keep the arms apart (see rule 1).
+>
+> | | One-armed (default) | Two arms |
+> |---|---|---|
+> | Follower bringup | `ffw_sg2_follower_ai.launch.py` | `ffw_sg2_follower_ai_both_arms.launch.py` |
+> | Controller setting | `enable_right_arm: false` (code default) | `enable_right_arm: true` in every controller section of the config |
+> | Homing button / reset | default `--arms left` | `--arms left,right` |
+>
+> - You still wear both leader arms and hold both triggers to engage; the right leader arm is
+>   simply ignored by the controller.
+> - **Needs the one-armed `cyclo_control` build in the ai_worker container.** With the old
+>   build the controller waits for the right arm to match its goal and never arms.
+> - Record demonstrations with robot type `ffw_sg2_rev1_left` so datasets hold the left arm only.
+> - This guide's Cartesian teleop is the supported one-armed teleop. DIRECT leader-to-follower
+>   teleop (`ffw_sg2_ai`, the Cyclo Manager "Leader") is not: its "joints synced" test averages
+>   both arms, so with a limp right follower arm it may never report synced and the left arm
+>   stays in its slow catch-up mode.
+>
+> **Two rules for one-armed operation:**
+> 1. **Secure the right arm well clear of the left arm, the table edge and the lift's travel
+>    before every bringup, homing or run.** Nothing checks where it is: the bringup, the reset
+>    scripts, policies and replays move the left arm and lift without knowing, and the
+>    controller's collision model does not cover most left-arm vs right-arm contacts.
+> 2. **To cut torque use the E-STOP or kill the bringup.** The software torque-off service does
+>    nothing in one-armed mode.
+>
+> **Before the first bringup after any container restart, recreate or image update, run**
+> `~/ai_worker/tools/one_armed_container_check.sh` **on the host.** The one-armed bringup and the
+> one-armed `cyclo_control` build live only inside the `ai_worker` container; a recreated container
+> silently goes back to the stock two-arm bringup. The check says what is missing and
+> `--install` puts the bringup files back.
+> Starting the robot from the Cyclo Manager UI is safe for the right arm (the bringup ignores the
+> `ros2_control_type` the UI sends), but the UI may reuse an old start-pose file such as
+> `pack_position.yaml`: check the arguments it shows before pressing start.
+
 All paths below are inside the Docker containers. Enter a container with:
 `cd ~/<repo> && ./docker/container.sh enter`  (repo = `ai_worker` unless noted).
 
@@ -23,12 +62,13 @@ Prereqs: robot powered, **E-STOP A pressed** (torque on), Zenoh daemon running
 
 Use SEPARATE terminals (T1..T3), each entered into the `ai_worker` container.
 
-### T1 - Follower at the tabletop start pose
+### T1 - Follower at the tabletop start pose (left arm only)
+Put the unpowered right arm in a safe resting position first, clear of the left arm's workspace.
 ```bash
 ros2 launch ffw_bringup ffw_sg2_follower_ai.launch.py \
-  init_position_file:=tabletop_manip_position.yaml
+  init_position_file:=tabletop_manip_left_arm_position.yaml
 ```
-Wait until the arms/lift/head reach the start pose and the arm settles.
+Wait until the left arm, lift and head reach the start pose and the arm settles.
 (Add `launch_cameras:=false launch_lidar:=false` if you don't need them.)
 
 ### T2 - Cartesian controller (leader mode) with the tabletop tuning
@@ -36,7 +76,8 @@ Wait until the arms/lift/head reach the start pose and the arm settles.
 ros2 launch cyclo_motion_controller_ros ai_worker_controller.launch.py \
   controller_type:=leader config_file:=/workspace/ai_worker_config_amp.yaml
 ```
-It logs `motion_scale`, `Posture bias: arm_*_joint3 ...`, then
+It logs `motion_scale`, `Posture bias: arm_*_joint3 ...`, "enable_right_arm is false: right
+arm is not commanded and is modelled at its measured pose.", then
 `waiting for reactivate topic '/reactivate' to become true` - expected.
 
 ### T3 - Leader (remapped launch)
@@ -68,7 +109,7 @@ return to the tabletop pose". Run it once (in the **cyclo_intelligence**
 container) alongside teleop, in its own terminal:
 ```bash
 python3 /workspace/scripts/homing_button_node.py \
-  --model-dir /workspace/poses/tabletop_manip
+  --model-dir /workspace/poses/tabletop_manip        # homes the LEFT arm only (default --arms left)
 ```
 Then, to home: **disengage the leader**, and **long-press the LEFT joystick
 tact** (event `left_long_time`). The node briefly disarms (`/reactivate false`)
